@@ -3,6 +3,7 @@
 # v 0.1 - 11/07/2023
 # issues fixed - 17/07/2023
 # v 0.2 - 19/07/2023 - updated to count sites which are not CpGs
+# v 0.3 - 18/03/2025 - updated to incorporate windows
 
 rm(list = ls())
 
@@ -14,6 +15,8 @@ suppressPackageStartupMessages(library(getopt))
 # specify command line options
 spec <- matrix(c(
   'vcf', 'v', 1, 'character', 'vcf path',
+  'start', 's', 1, 'character', 'vcf start position',
+  'stop', 'p', 1, 'character', 'vcf stop position',
   'flanking', 'f', 1, 'character', 'Path to flanking sites info - as bed file',
   'gff', 'g', 1, 'character', 'Path to gff annotation',
   'out', 'o', 1, 'character', 'Output file'
@@ -30,6 +33,8 @@ if (!is.null(opt$help)) {
 
 # set variables for call
 vcf_path <- opt$vcf
+start <- as.numeric(opt$start)
+stop <- as.numeric(opt$stop)
 flanking_path <- opt$flanking
 gff_path <- opt$gff
 out <- opt$out
@@ -39,6 +44,8 @@ out <- opt$out
 # vcf_path <- "./data/20_norm_filtered_ps.vcf.gz" # vcf
 # gff_path <- "./Ficedula_albicollis.FicAlb1.5.109.gff3.gz" # gff
 # out <- "./data/20_cpg.counts.gz"
+# start <- 1
+# stop <- 10000
 
 # read in vcf
 vcf <- read.vcfR(vcf_path)
@@ -46,6 +53,18 @@ vcf <- read.vcfR(vcf_path)
 gff <- read.table(gff_path, sep = "\t", quote = "")
 # filter gff - assumes per chr vcf
 my_chr <- vcf@fix[1,1] %>% as.vector()
+
+sprintf("Working on chromosome %s, windows:%s-%s", my_chr, start, stop)
+
+# Filter the vcf
+# split into specified window
+# pull site positions from vcf and make a numeric vector
+positions <- as.numeric(vcf@fix[,2])
+# find positions which fulfil window requirements
+idx <- which(positions >=start & positions <=stop)
+
+# filter vcf
+vcf <- vcf[idx, ]
 
 ### Dealing with flanking sites ###
 # read in flanking sites
@@ -56,7 +75,7 @@ names(sites) <- tolower(names(sites))
 sites <- sites %>% mutate(pos = as.numeric(pos))
 
 # bind columns
-flanking <- bind_cols(sites, flanking)
+flanking <- bind_cols(sites, flanking[idx,])
 
 # split sites
 s1 <- str_sub(flanking$sites, 1, 1)
@@ -86,9 +105,46 @@ status[which(cpg$alt == "C" & cpg$s3 == "G")] <- "poly-cpg3"
 # need to also extend this to sites where the first flanking allele is C (and the focal alt is G)
 status[which(cpg$alt == "G" & cpg$s1 == "C")] <- "poly-cpg4"
 
+# output some status stats
+x <- status
+x[is.na(x)] <- "variant"
+x <- as.factor(x)
+z <- x %>% table()
+sprintf("There are %s CpGs, %s polyCpGs and %s variants in this window and %s total variable sites", 
+        z[1]+z[2], z[3] + z[4], z[5], sum(z))
+
+### Sorting out duplicates
+cpg <- as_tibble(data.frame(cpg,status))
+dist_diff <- c(NA, diff(cpg$pos))
+cpg$dist_diff <- dist_diff == 1
+
+# If the previous site is a G or polymorphic for a G (i.e. polycpg) you can ignore it
+# set an index for where sites are consecutive (just to make code below clearer)
+x <- which(cpg$dist_diff == TRUE)
+# run through dataframe and identify consecutive sites where previous alt or ref is a G (i.e. we can ignore)
+y <- sapply(2:nrow(cpg), function(x) {
+  cpg$dist_diff[x] == TRUE & (cpg$ref[x-1] == "G" | cpg$alt[x-1] == "G")
+}, simplify = TRUE) 
+# nb - you have to append an NA here - i.e. skipping first row
+isG <- c(NA, y)
+# add to data.frame
+cpg$isG <- isG
+
+# run through dataframe and identify consecutive sites where previous alt or ref is a G (i.e. we can ignore)
+y <- sapply(2:nrow(cpg), function(x) {
+  cpg$dist_diff[x] == TRUE & (cpg$ref[x-1] == "C" | cpg$alt[x-1] == "C")
+}, simplify = TRUE) 
+# nb - you have to append an NA here - i.e. skipping first row
+isC <- c(NA, y)
+# add to data.frame
+cpg$isC <- isC
+
+# do we need to adjust?
+cpg$filter <- cpg$dist_diff == TRUE & cpg$isC == TRUE & !is.na(cpg$status)
+
 ### For CpG sites in REF
 # create cpg 
-cpg_vcf <- vcf[which(status == "cpg1" | status == "cpg2"), ]
+cpg_vcf <- vcf[which(status[idx] == "cpg1" | status[idx] == "cpg2"), ]
 
 # create vcf for testing
 test_vcf <- cpg_vcf[, ]
@@ -115,7 +171,7 @@ counts2 <- counts %>%
 
 ### For CpG sites in ALT - i.e. polycpg
 # create cpg 
-cpg_vcf2 <- vcf[which(status == "poly-cpg3" | status == "poly-cpg4"), ]
+cpg_vcf2 <- vcf[which(status[idx] == "poly-cpg3" | status[idx] == "poly-cpg4"), ]
 
 # create vcf for testing
 test_vcf2 <- cpg_vcf2[, ]
@@ -132,7 +188,7 @@ counts3 <- counts %>%
   pivot_wider(names_from = Indiv, values_from = count)
 
 ### now also create an output that is for sites which are not cpgs
-non_vcf <- vcf[which(is.na(status)), ]
+non_vcf <- vcf[which(is.na(status[idx])), ]
 
 # get counts
 counts <- extract_gt_tidy(non_vcf, alleles = FALSE) %>% 
@@ -175,6 +231,28 @@ my_genes <- bind_rows(my_genes_list) %>% select(-CHROM)
 
 # merge with counts
 cpg_final <- left_join(final_counts, my_genes, by = "POS")
+
+### correct for consecutive sites ###
+# Add the filter column
+cpg_final$filter <- cpg$filter
+# set index
+idx <- which(cpg_final$filter == TRUE)
+n_cons_sites <- length(idx) 
+# how many consecutive sites?
+sprintf("There are %s consecutive sites - %s percent of the total %s sites", n_cons_sites, signif(n_cons_sites/nrow(cpg_final)*100, 3), nrow(cpg_final))
+# replacement counts
+replace <- sapply(idx, function(y) {
+  z <- cpg_final[c(y-1, y), ]
+  z %>% summarise_all(min)
+}, simplify = F) %>% bind_rows()
+replace$filter <- rep(1, nrow(replace))
+
+# remove original counts
+cpg_final2 <- cpg_final[-(c(idx, idx-1)), ]
+# append replacements
+cpg_final <- bind_rows(cpg_final2, replace) %>% arrange(POS) 
+
+sprintf("Corrected %s consecutive sites", n_cons_sites)
 
 # write out
 write_csv(cpg_final, out)

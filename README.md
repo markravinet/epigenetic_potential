@@ -35,10 +35,10 @@ We now have a file of flanking sites for the downstream analysis.
 
 ### Step 2: Count CpG positions
 
-In order to count the CpG positions, we use the R script `cpg_counter_v0.2.R`. It can be used as a commandline tool like so:
+In order to count the CpG positions, we use the R script `cpg_counter_v0.4.R`. It can be used as a commandline tool like so:
 
 ```
-Rscript cpg_counter_v0.2.R -v ${VCF} -f cpg_flanking_sites.bed -g ${GFF} -o $cpg.count.gz
+Rscript cpg_counter_v0.4.R -v ${VCF} -f cpg_flanking_sites.bed -g ${GFF} -s 1 -p 10000 -o $cpg.count.gz
 ```
 
 Where the options are as follows:
@@ -52,7 +52,7 @@ The script is designed to run on a single chromosome or block of a chromosome. I
 
 ### Step 3: Count CpG totals
 
-If you want to calculate the total CpG site numbers, you can use the `cpg_totaler_v0.1.R` script. This is more lightweight than the CpG counter facility and is designed to run on very large datasets (i.e. all variant and invariant sites in a genome). It's usuage is almost identical to the counting script.
+If you want to calculate the total CpG site numbers, you can use the `cpg_totaler_v0.1.R` script. This is more lightweight than the CpG counter facility and is designed to run on very large datasets (i.e. all variant and invariant sites in a genome). It's usuage is almost identical to the counting script. So you do **NOT** need to use it if you are using the counting script on a variant dataset.
 
 ```
 Rscript cpg_totaler_v0.1.R -v ${VCF} -f ${CHR}_cpg_flanking_sites.bed -g ${GFF} -o ${CHR}_cpg.count.gz
