@@ -46,6 +46,8 @@ Where the options are as follows:
 - `-v` - path to vcf
 - `-f` - path to flanking sites bedfile
 - `-g` - path to gff 
+- `-s` - the first position of the window
+- `-p` - the last position of the window
 - `-o` - output file path
 
 The script is designed to run on a single chromosome or block of a chromosome. It cannot run across the entire genome at once. Therefore it is advised you split the analyses across the chromosomes or genome windows in order to speed it up.
