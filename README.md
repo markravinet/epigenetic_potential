@@ -35,10 +35,10 @@ We now have a file of flanking sites for the downstream analysis.
 
 ### Step 2: Count CpG positions
 
-In order to count the CpG positions, we use the R script `cpg_counter_v0.4.R`. It can be used as a commandline tool like so:
+In order to count the CpG positions, we use the R script `cpg_counter_v0.5.R`. It can be used as a commandline tool like so:
 
 ```
-Rscript cpg_counter_v0.4.R -v ${VCF} -f cpg_flanking_sites.bed -g ${GFF} -s 1 -p 10000 -o $cpg.count.gz
+Rscript cpg_counter_v0.5.R -v ${VCF} -f cpg_flanking_sites.bed -g ${GFF} -s 1 -p 10000 -o $cpg.count.gz
 ```
 
 Where the options are as follows:

@@ -4,6 +4,8 @@
 # issues fixed - 17/07/2023
 # v 0.2 - 19/07/2023 - updated to count sites which are not CpGs
 # v 0.3 - 18/03/2025 - updated to incorporate windows
+# v 0.4 - 19/11/2025 - updated to incorporate windows
+# v 0.5 - 05/01/2026 - updated to incorporate windows
 
 rm(list = ls())
 
@@ -40,12 +42,12 @@ gff_path <- opt$gff
 out <- opt$out
 
 # testing data
-# flanking_path <- "./data/20_cpg_flanking_sites.bed" # flanking sites
-# vcf_path <- "./data/20_norm_filtered_ps.vcf.gz" # vcf
+# flanking_path <- "./data/1_1_5000000_cpg_flanking_sites.bed" # flanking sites
+# vcf_path <- "./data/1_norm_filtered_gs_depth_filtered_1_1_5000000.vcf.gz" # vcf
 # gff_path <- "./Ficedula_albicollis.FicAlb1.5.109.gff3.gz" # gff
-# out <- "./data/20_cpg.counts.gz"
+# out <- "./data/1_cpg.counts.gz"
 # start <- 1
-# stop <- 10000
+# stop <- 5000000
 
 # read in vcf
 vcf <- read.vcfR(vcf_path)
@@ -229,11 +231,14 @@ my_genes_list <- apply(my_gff, 1, function(x){
 # make a data.frame
 my_genes <- bind_rows(my_genes_list) %>% select(-CHROM)
 
-# merge with counts
+# merge with counts 
 cpg_final <- left_join(final_counts, my_genes, by = "POS")
 
+# remove any duplicate rows (created by genes with multiple hits)
+cpg_final <- distinct(cpg_final, POS, .keep_all = T)
+
 ### correct for consecutive sites ###
-# Add the filter column
+# Add the filter column - ISSUE IS HERE
 cpg_final$filter <- cpg$filter
 # set index
 idx <- which(cpg_final$filter == TRUE)
